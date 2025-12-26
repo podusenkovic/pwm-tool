@@ -75,6 +75,9 @@ typedef struct config {
 	 *  Default value specified in @ref DEFAULT_PWM_DURATION_MS. */
 	unsigned int duration_ms;
 
+	/** PWM duty cycle value (see pwm_enable_duty for format) */
+	unsigned int duty_val;
+
 	/** If set, PWM will remain enabled on exit. */
 	int keep_enabled;
 
@@ -95,13 +98,14 @@ static config_t config = {
 	.channel      = DEFAULT_PWM_CHANNEL,
 	.frequency_hz = DEFAULT_PWM_FREQUENCY_HZ,
 	.duration_ms  = DEFAULT_PWM_DURATION_MS,
+	.duty_val     = PWM_DUTY_DEFAULT,
 	.keep_enabled = 0,
 };
 
 /**
  * @brief Short command line options list
  */
-static const char *opts_str = "hp:c:f:d:s:k";
+static const char *opts_str = "hp:c:f:d:D:s:k";
 
 /**
  * @brief Long command line options list
@@ -112,6 +116,7 @@ static const struct option opts[] = {
 	{ .name = "channel",      .val = 'c', .has_arg = 1 },
 	{ .name = "frequency",    .val = 'f', .has_arg = 1 },
 	{ .name = "duration",     .val = 'd', .has_arg = 1 },
+	{ .name = "duty",         .val = 'D', .has_arg = 1 },
 	{ .name = "script",       .val = 's', .has_arg = 1 },
 	{ .name = "keep-enabled", .val = 'k' },
 	{ .name = "version",      .val = 'V' },
@@ -149,6 +154,12 @@ static void display_usage(void)
 		"  -d, --duration <duration_in_ms>\n"
 		"        Set PWM duration in milliseconds.\n"
 		"        Default: %u\n"
+		"\n"
+		"  -D, --duty <value>\n"
+		"        Set PWM duty cycle. Value can be:\n"
+		"        - 1-255: raw value (duty = period * value / 255)\n"
+		"        - 1-100 followed by '%%': percentage (e.g., 50%% = 50%%)\n"
+		"        Default: 50%%\n"
 		"\n"
 		"  -k, --keep-enabled\n"
 		"        If specified, PWM will remain enabled on exit.\n"
@@ -208,6 +219,20 @@ static int parse_cli_args(int argc, char *argv[])
 				config.duration_ms =
 					(unsigned int)strtoul(optarg, NULL, 0);
 				break;
+
+			case 'D': /* --duty */ {
+				size_t len = strlen(optarg);
+				if (len > 0 && optarg[len - 1] == '%') {
+					unsigned int percent =
+						(unsigned int)strtoul(optarg, NULL, 10);
+					config.duty_val = PWM_DUTY_PERCENT_FLAG | percent;
+				}
+				else {
+					config.duty_val =
+						(unsigned int)strtoul(optarg, NULL, 0);
+				}
+				break;
+			}
 
 			case 's': /* --script */
 				config.script = strdup(optarg);
@@ -285,14 +310,15 @@ int main(int argc, char *argv[])
 		.script               =  config.script,
 		.default_frequency_hz =  config.frequency_hz,
 		.default_duration_ms  =  config.duration_ms,
+		.default_duty_val     =  config.duty_val,
 		.stop_flag            = &exit_flag,
 	};
 
 	if (!config.script) {
 		if (config.keep_enabled)
-			pwm_execute_config.script = "fdk";
+			pwm_execute_config.script = "fduk";
 		else
-			pwm_execute_config.script = "fd";
+			pwm_execute_config.script = "fdu";
 	}
 
 	ret = pwm_execute(&pwm, &pwm_execute_config);

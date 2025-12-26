@@ -95,6 +95,21 @@ pwm_status_t pwm_open(pwm_t *pwm, unsigned int chip,
 	unsigned int channel, unsigned int flags);
 
 /**
+ * Duty cycle value indicating percentage mode (value contains percentage 0-100)
+ */
+#define PWM_DUTY_PERCENT_FLAG  0x8000
+
+/**
+ * Duty cycle value indicating use of default 50%
+ */
+#define PWM_DUTY_DEFAULT  0
+
+/**
+ * Maximum raw duty cycle value (1-255 range)
+ */
+#define PWM_DUTY_RAW_MAX  255
+
+/**
  * Enable PWM with specified frequency
  *
  * @param[in] pwm  Pointer to the PWM handle structure
@@ -105,6 +120,22 @@ pwm_status_t pwm_open(pwm_t *pwm, unsigned int chip,
  * @return PWM_E_IO Can't enable channel
  */
 pwm_status_t pwm_enable(pwm_t *pwm, unsigned int freq);
+
+/**
+ * Enable PWM with specified frequency and duty cycle
+ *
+ * @param[in] pwm       Pointer to the PWM handle structure
+ * @param[in] freq      Frequency in Hz
+ * @param[in] duty_val  Duty cycle value:
+ *                      - 0: default 50%
+ *                      - 1-255: raw value (duty = period * value / 255)
+ *                      - PWM_DUTY_PERCENT_FLAG | percent: percentage (0-100%)
+ *
+ * @return PWM_E_OK Success
+ * @return PWM_E_INVALID_FREQ Invalid frequency
+ * @return PWM_E_IO Can't enable channel
+ */
+pwm_status_t pwm_enable_duty(pwm_t *pwm, unsigned int freq, unsigned int duty_val);
 
 /**
  * Delay for specified duration
@@ -187,6 +218,18 @@ typedef struct {
 	 *   value will then be used as the default duration for
 	 *   subsequent commands.
 	 *
+	 * - `u[value]`:
+	 *   Set duty cycle from optional argument. Value can be:
+	 *   - 1-255: raw value (duty = period * value / 255)
+	 *   - 1-100 followed by 'p': percentage (e.g., u50p = 50%)
+	 *   If no argument is specified, the current default duty
+	 *   cycle will be used.
+	 *
+	 * - `U[value]`:
+	 *   Same as `u[value]`, but if an argument is specified, the
+	 *   value will then be used as the default duty cycle for
+	 *   subsequent commands.
+	 *
 	 * - `k`:
 	 *   Keep the PWM enabled when the command is completed.
 	 *
@@ -207,6 +250,11 @@ typedef struct {
 	 * <code>
 	 *     F1000D100 d50 f d50 f
 	 * </code>
+	 *
+	 * Script with 25% duty cycle:
+	 * <code>
+	 *     F1000u25p d100
+	 * </code>
 	 */
 	const char *script;
 
@@ -215,6 +263,9 @@ typedef struct {
 
 	/** Default duration in milliseconds */
 	unsigned int default_duration_ms;
+
+	/** Default duty cycle value (see pwm_enable_duty for format) */
+	unsigned int default_duty_val;
 
 	/** Pointer to the external stop flag */
 	volatile int *stop_flag;

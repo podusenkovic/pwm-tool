@@ -1,7 +1,5 @@
 # PWM Tool
 
-![Build Status](https://github.com/tano-systems/pwm-tool/actions/workflows/build.yml/badge.svg?branch=master) ![Tests Status](https://github.com/tano-systems/pwm-tool/actions/workflows/build_and_test.yml/badge.svg?branch=master)
-
 This is a simple Linux command line tool designed to control the available PWM channels via the sysfs interface. The main purpose of this utility is to control a buzzer device connected to the corresponding PWM channel.
 
 ## Build and Install
@@ -70,6 +68,7 @@ pwm [options]
 | `-c <channel>`     | `--channel=<channel>`      | `0`           | Set PWM channel number to `<channel>`                        |
 | `-f <freq_hz>`     | `--frequency=<freq_hz>`    | `1000`        | Set PWM frequency in Hz. If the specified frequency is `0`, the PWM will not be enabled. |
 | `-d <duration_ms>` | `--duration=<duration_ms>` | `250`         | Set PWM enabled state duration in milliseconds.              |
+| `-D <value>`       | `--duty=<value>`           | `50%`         | Set PWM duty cycle. Value can be: `1-255` (raw value, duty = period × value / 255) or `1-100` followed by `%` (percentage, e.g., `50%`). |
 | `-k`               | `--keep-enabled`           | -             | If specified, PWM will remain enabled on exit.               |
 | `-s <script>`      | `--script=<script>`        | -             | Run PWM commands script. See details in "[Scripts Syntax](#scripts-syntax)" section. |
 | -                  | `--version`                | -             | Display PWM tool version.                                    |
@@ -105,17 +104,21 @@ Examples of how to write multiple commands can be seen in the "[Examples](#examp
 
 Available PWM command operations:
 
-| Operation | Description                                                  |
-| --------- | ------------------------------------------------------------ |
-| `f[hz]`   | Set frequency from optional argument. If no argument is specified, the current default frequency will be used. |
-| `F[hz]`   | Same as `f[hz]`, but if an argument is specified, the value will then be used as the default frequency for subsequent commands. |
-| `d[ms]`   | Set duration from optional argument. If no argument is specified, the current default duration will be used. |
-| `D[ms]`   | Same as `d[ms]`, but if an argument is specified, the value will then be used as the default duration for subsequent commands. |
-| `k`       | Keep the PWM enabled when the command is completed.          |
+| Operation    | Description                                                  |
+| ------------ | ------------------------------------------------------------ |
+| `f[hz]`      | Set frequency from optional argument. If no argument is specified, the current default frequency will be used. |
+| `F[hz]`      | Same as `f[hz]`, but if an argument is specified, the value will then be used as the default frequency for subsequent commands. |
+| `d[ms]`      | Set duration from optional argument. If no argument is specified, the current default duration will be used. |
+| `D[ms]`      | Same as `d[ms]`, but if an argument is specified, the value will then be used as the default duration for subsequent commands. |
+| `u[value]`   | Set duty cycle from optional argument. Value can be `1-255` (raw) or `1-100` followed by `p` for percentage (e.g., `u50p` = 50%). If no argument is specified, the current default duty cycle will be used. |
+| `U[value]`   | Same as `u[value]`, but if an argument is specified, the value will then be used as the default duty cycle for subsequent commands. |
+| `k`          | Keep the PWM enabled when the command is completed.          |
 
 If no `f` or `F` operation is specified in a command, then a frequency of 0 will be used for that command, i.e. such commands can be used to delay script execution.
 
 If no `d` or `D` operation is specified in a command, the current default duration will be used for that command. Changing the default duration can either be done through the configuration structure or directly at runtime with the `D[ms]` operation.
+
+If no `u` or `U` operation is specified in a command, the current default duty cycle (50%) will be used.
 
 
 ## Examples
@@ -133,6 +136,21 @@ $ pwm -f 1000 -d 100
 Same for PWM commands script mode:
 ```shell
 $ pwm -s "F1000D100 d50 f d50 f"
+```
+
+Single beep with 25% duty cycle:
+```shell
+$ pwm -f 1000 -d 250 -D 25%
+```
+
+Same using raw duty value (64/255 ≈ 25%):
+```shell
+$ pwm -f 1000 -d 250 -D 64
+```
+
+Script with varying duty cycle:
+```shell
+$ pwm -s "F1000D100u25p d50 u50p d50 u75p"
 ```
 
 ## Changelog

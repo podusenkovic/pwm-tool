@@ -291,6 +291,11 @@ static pwm_status_t pwm_enable_ext(
 
 pwm_status_t pwm_enable(pwm_t *pwm, unsigned int freq)
 {
+	return pwm_enable_duty(pwm, freq, PWM_DUTY_DEFAULT);
+}
+
+pwm_status_t pwm_enable_duty(pwm_t *pwm, unsigned int freq, unsigned int duty_val)
+{
 	float fresult;
 	unsigned int period;
 	unsigned int duty;
@@ -300,7 +305,21 @@ pwm_status_t pwm_enable(pwm_t *pwm, unsigned int freq)
 
 	fresult = 1000000000 / (float)freq;
 	period  = (unsigned int)(roundf(fresult));
-	duty    = (unsigned int)(roundf(period / 2.0f));
+
+	if (duty_val == PWM_DUTY_DEFAULT) {
+		duty = (unsigned int)(roundf(period / 2.0f));
+	}
+	else if (duty_val & PWM_DUTY_PERCENT_FLAG) {
+		unsigned int percent = duty_val & ~PWM_DUTY_PERCENT_FLAG;
+		if (percent > 100)
+			percent = 100;
+		duty = (unsigned int)(roundf(period * percent / 100.0f));
+	}
+	else {
+		if (duty_val > PWM_DUTY_RAW_MAX)
+			duty_val = PWM_DUTY_RAW_MAX;
+		duty = (unsigned int)(roundf(period * duty_val / (float)PWM_DUTY_RAW_MAX));
+	}
 
 	return pwm_enable_ext(pwm, period, duty);
 }
@@ -394,6 +413,9 @@ typedef struct {
 	/** Duration */
 	unsigned int duration_ms;
 
+	/** Duty cycle value (see pwm_enable_duty for format) */
+	unsigned int duty_val;
+
 	/** Keep enabled after command executed */
 	int keep_enabled;
 
@@ -415,6 +437,9 @@ typedef struct {
 	/** Default duration (used if not specified in command) */
 	unsigned int duration_ms;
 
+	/** Default duty cycle value (used if not specified in command) */
+	unsigned int duty_val;
+
 } pwm_cmd_fetcher_t;
 
 /**
@@ -424,13 +449,15 @@ static void pwm_cmd_fetch_init(
 	pwm_cmd_fetcher_t *f,
 	const char *script,
 	unsigned int frequency_hz,
-	unsigned int duration_ms
+	unsigned int duration_ms,
+	unsigned int duty_val
 )
 {
 	f->script = f->pos = script;
 
 	f->frequency_hz = frequency_hz;
 	f->duration_ms  = duration_ms;
+	f->duty_val     = duty_val;
 }
 
 /**
@@ -452,6 +479,7 @@ static int pwm_cmd_fetch(pwm_cmd_fetcher_t *f, pwm_cmd_t *cmd)
 	cmd->keep_enabled = 0;
 	cmd->frequency_hz = 0;
 	cmd->duration_ms  = f->duration_ms;
+	cmd->duty_val     = f->duty_val;
 
 	/* Parse operations */
 	while (f->pos[0] && !isspace(f->pos[0])) {
@@ -492,6 +520,30 @@ static int pwm_cmd_fetch(pwm_cmd_fetcher_t *f, pwm_cmd_t *cmd)
 				}
 				break;
 
+			case 'u': /* fallthrough */
+			case 'U':
+				if (isdigit(f->pos[1])) {
+					unsigned int val =
+						(unsigned int)strtoul(f->pos + 1, (char **)&f->pos, 10);
+
+					/* Check for 'p' suffix indicating percentage */
+					if (f->pos[0] == 'p') {
+						cmd->duty_val = PWM_DUTY_PERCENT_FLAG | val;
+						f->pos++;
+					}
+					else {
+						cmd->duty_val = val;
+					}
+
+					if (op == 'U')
+						f->duty_val = cmd->duty_val;
+				}
+				else {
+					cmd->duty_val = f->duty_val;
+					f->pos++;
+				}
+				break;
+
 			default:
 				fprintf(stderr,
 					"ERROR: Unknown command '%c' in script at position %u\n",
@@ -513,7 +565,7 @@ static int pwm_cmd_execute(pwm_t *pwm, pwm_cmd_t *cmd)
 	pwm_status_t ret = PWM_E_OK;
 
 	if (cmd->frequency_hz) {
-		ret = pwm_enable(pwm, cmd->frequency_hz);
+		ret = pwm_enable_duty(pwm, cmd->frequency_hz, cmd->duty_val);
 		if (ret != PWM_E_OK) {
 			fprintf(stderr,
 				"ERROR: Can't enable PWM channel %u of chip %u: %s\n",
@@ -548,7 +600,8 @@ pwm_status_t pwm_execute(
 		&fetcher,
 		config->script,
 		config->default_frequency_hz,
-		config->default_duration_ms
+		config->default_duration_ms,
+		config->default_duty_val
 	);
 
 	clock_gettime(CLOCK_MONOTONIC, &cmd.ts_end);
